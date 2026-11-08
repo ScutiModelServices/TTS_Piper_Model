@@ -1,5 +1,7 @@
 # TTS_Piper_Model: Docker on a deployment machine
 
+Before the first call, open `/admin/` → **Updates** → **Download**. Startup never downloads weights. The [admin guide](guide-web-ui.md#updates-and-first-download) includes the curl alternative.
+
 Run Piper text to speech on the CPU on a separate always-on machine (default `lex@scutiserver1.local`, folder
 `/media/ZimaOS-HD/Apps/TTS_Piper_Model`). Callers reach it over the published port.
 
@@ -44,7 +46,7 @@ docker compose up -d --build
 docker compose ps
 curl http://127.0.0.1:29320/health
 ```
-The first start downloads 63 MB of voice files (each further voice downloads on first use) into the `tts_piper_model_models` volume; `tts_piper_model_lb` waits for a healthy service
+Startup never downloads weights; `tts_piper_model_lb` waits for `/health` to answer, even before weights are downloaded
 (up to 300 s grace).
 
 ## 4. Connect callers

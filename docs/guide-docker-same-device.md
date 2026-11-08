@@ -1,12 +1,14 @@
 # TTS_Piper_Model: Docker Desktop on this PC
 
+Before the first call, open `/admin/` → **Updates** → **Download**. Startup never downloads weights. The [admin guide](guide-web-ui.md#updates-and-first-download) includes the curl alternative.
+
 Run Piper text to speech on the CPU in Docker Desktop on the machine you work on, so other programs on it can call it.
 
 ## Requirements
 
 - Docker Desktop with Compose v2 (Windows: WSL2 backend).
 - RAM per replica: about 300 MB with one voice loaded (measured on Windows; each replica loads its own copy). Keep `SERVICE_REPLICAS=1` on a PC. Docker Desktop on Windows caps its engine at about half of your RAM unless you raise it in `.wslconfig`.
-- Network access on the first start to download the files (63 MB per voice) from Hugging Face.
+- Network access for explicit Downloads from the Updates card; startup and inference use downloaded files only.
 - CPU only, no GPU needed.
 
 ## Steps
@@ -15,13 +17,13 @@ Run Piper text to speech on the CPU in Docker Desktop on the machine you work on
    ```bash
    cp .env.example .env
    ```
-   Set `SERVICE_ADMIN_PASSWORD` (empty = no auth and no admin page, fine for a local test). Leave `SERVICE_PORT=29320`. Leave `SERVICE_REPLICAS=1`.
+   Set `SERVICE_ADMIN_PASSWORD` (required to download weights through the admin page). Leave `SERVICE_PORT=29320`. Leave `SERVICE_REPLICAS=1`.
 2. Start:
    ```bash
    docker compose up -d --build
    ```
-   The first start downloads 63 MB of voice files (each further voice downloads on first use) into the `tts_piper_model_models` volume. `tts_piper_model_lb` starts only after the service is healthy
-   (up to 300 s grace). Watch with `docker compose ps` and `docker compose logs -f tts_piper_model`.
+   Startup loads downloaded weights only; open `/admin/`, then **Updates → Download** before the first call. `tts_piper_model_lb` starts once `/health` answers; readiness may still be false
+   (300 s startup grace). Watch with `docker compose ps` and `docker compose logs -f tts_piper_model`.
 3. Check:
    ```bash
    curl http://127.0.0.1:29320/health
@@ -50,7 +52,7 @@ In `.env` next to `docker-compose.yml`:
 
 On the **Settings** card of `/admin/` (saved in `settings.json` beside the tokens, shared by all replicas; a saved
 value beats the environment variable named in brackets): update check hours (`SERVICE_UPDATE_CHECK_HOURS`, 6),
-in-flight cap (`SERVICE_MAX_INFLIGHT`, 0 = 4), answers kept per replica (`SERVICE_CACHE_SIZE`, 64, 0 = off; at most 1 MB each), voices served (`SERVICE_VOICES`, default `en_US-lessac-medium`; comma separated Piper voice names, the first is the default, each downloads on first use), voices repository (`SERVICE_MODEL`, restart) and load at start (`SERVICE_WARM`, restart). Compose does not pass these;
+in-flight cap (`SERVICE_MAX_INFLIGHT`, 0 = 4), answers kept per replica (`SERVICE_CACHE_SIZE`, 64, 0 = off; at most 1 MB each), voices served (`SERVICE_VOICES`, default `en_US-lessac-medium`; comma separated Piper voice names, the first is the default, each must be downloaded through Updates before use), voices repository (`SERVICE_MODEL`, restart) and load at start (`SERVICE_WARM`, restart). Compose does not pass these;
 add the variable under `environment:` of `tts_piper_model` to use one as a starting value.
 
 ## Daily use
@@ -75,10 +77,10 @@ python tools/bench.py http://127.0.0.1:29320 --save out
 | Symptom | Fix |
 |---|---|
 | `address already in use` on 29320 | Another copy (`run.bat`, or the same stack on another compose project) is running. Stop it or change `SERVICE_PORT`. |
-| `/health` shows `ready: false` for minutes | First start: the weights are downloading or loading. Check `docker compose logs -f tts_piper_model`. |
+| `/health` shows `ready: false` for minutes | Download weights from the Updates card first; otherwise the service stays available with `ready: false`. Check `docker compose logs -f tts_piper_model`. |
 | 401 Invalid token | The caller's token is missing or revoked; make one on `/admin/`. |
 | Container restarts in a loop | Out of RAM. Raise the Docker Desktop memory limit or lower the replica count. |
-| `tts_piper_model_lb` never starts | No replica is healthy yet (first download, or out of memory). `docker compose logs tts_piper_model`. |
+| `tts_piper_model_lb` never starts | No replica is healthy yet (process failure or out of memory). `docker compose logs tts_piper_model`. |
 | Replicas restart in a loop | Out of RAM. Lower `SERVICE_REPLICAS`. |
 | 403 "may not use voice" | The token's list on `/admin/` does not include that voice (or the default voice, when `voice` is left out). |
 | 404 on `/v1/speak` | The voice is not served here. `GET /v1/voices` lists them. |

@@ -1,15 +1,17 @@
 # TTS_Piper_Model: without Docker, on Windows
 
+Before the first call, open `/admin/` → **Updates** → **Download**. Startup never downloads weights. The [admin guide](guide-web-ui.md#updates-and-first-download) includes the curl alternative.
+
 Run Piper text to speech on the CPU directly with Python: one process, no load balancer, listening on `127.0.0.1:29320`.
 
 ## Requirements
 - Windows with Python 3.11 or newer and uv (`winget install astral-sh.uv`).
-- Internet on the first start (63 MB of voice files (each further voice downloads on first use)).
+- Internet only when an admin presses Download on the Updates card.
 - RAM for the model (one copy).
 
 ## Start
 Double-click `run.bat`, or run it in a terminal from `TTS_Piper_Model\`. Choose **1 Run the service** in the menu, or run `run.bat run` to skip the menu. It runs `uv sync` to create or update `.venv`, then starts
-`python src/app.py`. The first start downloads 63 MB of voice files (each further voice downloads on first use).
+`python src/app.py`. Startup loads downloaded weights only; open `/admin/`, then **Updates → Download** before the first call.
 
 Linux or macOS:
 ```bash

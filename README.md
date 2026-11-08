@@ -34,7 +34,7 @@ so it measures speaking, not the cache.
 
 **Voices.** The *Voices served* setting is a comma separated list of Piper voice names (`en_US-lessac-medium`,
 `en_GB-alba-medium`, ...) from the Hugging Face repository `rhasspy/piper-voices`. The first is the default. Each
-voice downloads on its first use and then stays loaded; a name outside the list is 404.
+voice loads only from its downloaded local files and then stays loaded; a name outside the list is 404.
 
 A token's *projects* list on the admin page limits the voices it may use (the page calls them projects; here they
 are voice names). A token without a list may use every served voice.
@@ -48,12 +48,14 @@ load them on their next request. `/metrics` (admin password) is Prometheus text 
 
 ## Run
 
+Startup, warm-up and inference never download weights. With no downloaded weights, `/health` answers `ready: false` and speech calls return 503. Open `/admin/` → **Updates** → **Download** before the first call; see the [admin guide](docs/guide-web-ui.md#updates-and-first-download) for the curl alternative.
+
 ```bash
 docker compose up -d --build        # http://<host>:29320
 python tools/bench.py http://127.0.0.1:29320 --save out
 ```
 
-Without Docker: `run.bat` (uv, listens on `127.0.0.1:29320`). The first start downloads 63 MB. Memory:
+Without Docker: `run.bat` (uv, listens on `127.0.0.1:29320`). Startup loads downloaded weights only; open `/admin/`, then **Updates → Download** before the first call. Memory:
 about 300 MB per replica with one voice loaded, so `SERVICE_REPLICAS` multiplies it. See `deployment.md`.
 
 ## Tests
