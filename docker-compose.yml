@@ -1,46 +1,57 @@
 # TTSPiper service: N API replicas behind one nginx address. Each replica runs the model in its own process,
 # so RAM use is per replica; the downloaded weights are shared through the models volume.
-# Start:  docker compose up -d --build          (callers use http://<host>:9150)
-# Scale:  TTSPIPER_REPLICAS=3 docker compose up -d --build, then: docker compose restart ttspiper_lb
+# Start:  docker compose up -d --build          (callers use http://<host>:29320)
+# Scale:  SERVICE_REPLICAS=3 docker compose up -d --build, then: docker compose restart tts_piper_model_lb
 
-name: ttspiper
+name: tts_piper_model
 
 services:
-  ttspiper:
+  tts_piper_model:
     build: .
+    image: tts_piper_model:latest
     restart: unless-stopped
+    mem_limit: ${SERVICE_MEM_LIMIT:-0}  # 0 = no cap; a cap makes an out-of-memory kill stay inside this container
     environment:
-      TTSPIPER_ADMIN_PASSWORD: ${TTSPIPER_ADMIN_PASSWORD:-}
-      TTSPIPER_NUM_THREAD: ${TTSPIPER_NUM_THREAD:-}
-      TTSPIPER_REPLICAS: ${TTSPIPER_REPLICAS:-1}  # shown read-only on /admin/
+      SERVICE_ADMIN_PASSWORD: ${SERVICE_ADMIN_PASSWORD:-}
+      SERVICE_NUM_THREAD: ${SERVICE_NUM_THREAD:-}
+      SERVICE_REPLICAS: ${SERVICE_REPLICAS:-1}  # shown read-only on /admin/
     volumes:
-      - models:/models
-      - tokens:/data
+      - tts_piper_model_models:/models
+      - tts_piper_model_data:/data
     deploy:
-      replicas: ${TTSPIPER_REPLICAS:-1}
+      replicas: ${SERVICE_REPLICAS:-1}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9150/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:29320/health')"]
       interval: 15s
       timeout: 5s
       start_period: 300s
-    networks: [ttspiper]
+    networks: [tts_piper_model]
 
-  ttspiper_lb:
+  tts_piper_model_lb:
+    container_name: tts_piper_model_lb
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
-      - "${TTSPIPER_PORT:-9150}:9150"
+      - "${SERVICE_PORT:-29320}:29320"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      ttspiper:
+      tts_piper_model:
         condition: service_healthy
-    networks: [ttspiper]
+    networks:
+      tts_piper_model:
+      citadel:
+        aliases: [tts_piper_model_lb]
 
 volumes:
-  models:
-  tokens:
-
+  tts_piper_model_models:
+    name: tts_piper_model_models
+  tts_piper_model_data:
+    name: tts_piper_model_data
 networks:
-  # Other stacks reach http://ttspiper_lb:9150 by joining this network.
-  ttspiper:
+  # Other stacks reach http://tts_piper_model_lb:29320 by joining this network.
+  tts_piper_model:
+    name: tts_piper_model
+  citadel:
+    name: citadel_core
+    external: true

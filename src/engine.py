@@ -1,7 +1,7 @@
 """Piper text-to-speech run in this process on the CPU.
 
 A voice is a pair of files (`<name>.onnx`, `<name>.onnx.json`) in the Hugging Face repository `rhasspy/piper-voices`.
-The service serves the voices listed in its `voices` setting; each one downloads on its first use and stays loaded.
+The service serves the voices listed in its `voices` setting; each one loads from the local cache and stays loaded.
 One generation runs at a time per replica; scale with replicas.
 
 shortcut: the update check compares the whole voices repository, so it also reports changes to voices nobody uses."""
@@ -70,8 +70,8 @@ def load(repo: str, name: str, threads: int | None) -> Voice:
     from piper import PiperVoice
 
     base = voice_file(name)
-    onnx = hf_hub_download(repo, base + ".onnx")
-    config = hf_hub_download(repo, base + ".onnx.json")
+    onnx = hf_hub_download(repo, base + ".onnx", local_files_only=True)
+    config = hf_hub_download(repo, base + ".onnx.json", local_files_only=True)
     voice = PiperVoice.load(onnx, config_path=config)
     if threads:  # Piper does not expose the thread count, so the session is rebuilt with it
         import onnxruntime
@@ -98,14 +98,15 @@ def _cached_sha(repo: str, voice: str) -> str | None:
 def _download(repo: str, voices: list[str]) -> None:
     from huggingface_hub import hf_hub_download
 
+    revision = _remote_sha(repo)
     for name in voices:
         for suffix in (".onnx", ".onnx.json"):
-            hf_hub_download(repo, voice_file(name) + suffix, token=False)
+            hf_hub_download(repo, voice_file(name) + suffix, revision=revision, token=False)
 
 
 def default_marker() -> Path:
     """File in the shared models volume whose content changes when one replica downloads new weights."""
-    configured = os.environ.get("TTSPIPER_WEIGHTS_MARKER")
+    configured = os.environ.get("SERVICE_WEIGHTS_MARKER")
     return Path(configured) if configured else Path(os.environ.get("HF_HOME") or "~/.cache/huggingface").expanduser() / ".ttspiper-weights-version"
 
 
@@ -176,7 +177,10 @@ class PiperEngine:
     def _voice(self, name: str) -> Voice:
         with self._load_lock:
             if name not in self._loaded:
-                self._loaded[name] = self._loader(self.model, name, self._threads)
+                try:
+                    self._loaded[name] = self._loader(self.model, name, self._threads)
+                except OSError:
+                    raise EngineError("Model weights are not downloaded. Ask an admin to press Download on the Updates card.", 503) from None
             return self._loaded[name]
 
     def _name(self, voice: str | None) -> str:
