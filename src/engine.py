@@ -98,10 +98,13 @@ def _cached_sha(repo: str, voice: str) -> str | None:
 def _download(repo: str, voices: list[str]) -> None:
     from huggingface_hub import hf_hub_download
 
+    from progress import hub_blobs, hub_total, tracking
+
     revision = _remote_sha(repo)
-    for name in voices:
-        for suffix in (".onnx", ".onnx.json"):
-            hf_hub_download(repo, voice_file(name) + suffix, revision=revision, token=False)
+    names = [voice_file(name) + suffix for name in voices for suffix in (".onnx", ".onnx.json")]
+    with tracking(repo, hub_total(repo, revision, names), hub_blobs(repo)):
+        for name in names:
+            hf_hub_download(repo, name, revision=revision, token=False)
 
 
 def default_marker() -> Path:
